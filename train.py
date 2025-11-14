@@ -1,8 +1,3 @@
-"""
-Ray Train example for distributed PyTorch training on Kubernetes.
-This example trains a simple neural network on the Fashion MNIST dataset.
-"""
-
 import os
 import torch
 import torch.nn as nn
@@ -57,14 +52,14 @@ def train_func(config):
         transforms.Normalize((0.1307,), (0.3081,))
     ])
 
-    train_dataset = datasets.FashionMNIST(
+     train_dataset = datasets.FashionMNIST(
         root="/tmp/data",
         train=True,
         download=True,
         transform=transform
     )
 
-    test_dataset = datasets.FashionMNIST(
+     test_dataset = datasets.FashionMNIST(
         root="/tmp/data",
         train=False,
         download=True,
@@ -78,7 +73,7 @@ def train_func(config):
         shuffle=True
     )
 
-    test_loader = DataLoader(
+     test_loader = DataLoader(
         test_dataset,
         batch_size=batch_size,
         shuffle=False
@@ -88,31 +83,33 @@ def train_func(config):
     model = Net()
     model = train.torch.prepare_model(model)
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
-    train_loader = train.torch.prepare_data_loader(train_loader)
+     train_loader = train.torch.prepare_data_loader(train_loader)
     test_loader = train.torch.prepare_data_loader(test_loader)
 
     # Training loop
+    print("Starting the training loop!")
     for epoch in range(epochs):
+        print(f"Starting on epoch {epoch}")
         model.train()
         train_loss = 0.0
         train_correct = 0
         train_total = 0
 
-        for batch_idx, (data, target) in enumerate(train_loader):
+         for batch_idx, (data, target) in enumerate(train_loader):
             optimizer.zero_grad()
             output = model(data)
             loss = F.nll_loss(output, target)
             loss.backward()
             optimizer.step()
 
-            train_loss += loss.item()
+             train_loss += loss.item()
             pred = output.argmax(dim=1, keepdim=True)
             train_correct += pred.eq(target.view_as(pred)).sum().item()
             train_total += target.size(0)
 
-            if batch_idx % 100 == 0:
+             if batch_idx % 100 == 0:
                 print(f"Epoch {epoch+1}/{epochs}, Batch {batch_idx}, Loss: {loss.item():.4f}")
 
         # Validation
@@ -121,7 +118,7 @@ def train_func(config):
         test_correct = 0
         test_total = 0
 
-        with torch.no_grad():
+         with torch.no_grad():
             for data, target in test_loader:
                 output = model(data)
                 test_loss += F.nll_loss(output, target, reduction='sum').item()
@@ -129,12 +126,12 @@ def train_func(config):
                 test_correct += pred.eq(target.view_as(pred)).sum().item()
                 test_total += target.size(0)
 
-        train_loss = train_loss / len(train_loader)
+         train_loss = train_loss / len(train_loader)
         train_acc = train_correct / train_total
         test_loss = test_loss / test_total
         test_acc = test_correct / test_total
 
-        print(f"\nEpoch {epoch+1}/{epochs}:")
+         print(f"\nEpoch {epoch+1}/{epochs}:")
         print(f"  Train Loss: {train_loss:.4f}, Train Acc: {train_acc:.4f}")
         print(f"  Test Loss: {test_loss:.4f}, Test Acc: {test_acc:.4f}\n")
 
@@ -143,7 +140,7 @@ def train_func(config):
         if train.get_context().get_world_rank() == 0:
             checkpoint = train.torch.TorchCheckpoint.from_state_dict(model.state_dict())
 
-        train.report(
+         train.report(
             metrics={
                 "epoch": epoch + 1,
                 "train_loss": train_loss,
@@ -154,51 +151,34 @@ def train_func(config):
             checkpoint=checkpoint
         )
 
-    print("Training completed!")
+     print("Training completed!")
 
 
-def main():
+  def main():
     """Main function to setup and run Ray Train."""
 
     # Configure S3/Minio settings
     os.environ["AWS_ACCESS_KEY_ID"] = "minioadmin"
     os.environ["AWS_SECRET_ACCESS_KEY"] = "minioadmin"
-    os.environ["AWS_ENDPOINT_URL"] = "https://minio.minio.svc.cluster.local:9000"
-    os.environ["AWS_S3_VERIFY_SSL"] = "false"
+    os.environ["AWS_ENDPOINT_URL"] = "http://minio.minio.svc.cluster.local:9000"
 
     # For s3fs (used by Ray for S3 storage)
-    os.environ["S3_ENDPOINT_URL"] = "https://minio.minio.svc.cluster.local:9000"
+    os.environ["S3_ENDPOINT_URL"] = "http://minio.minio.svc.cluster.local:9000"
 
     # Initialize Ray
-    ray.init(
-        runtime_env={
-            "pip": [
-                "torch==2.9.0",
-                "torchvision==0.24.0",
-                "boto3",
-                "s3fs"
-            ],
-            "env_vars": {
-                "AWS_ACCESS_KEY_ID": "minioadmin",
-                "AWS_SECRET_ACCESS_KEY": "minioadmin",
-                "AWS_ENDPOINT_URL": "https://minio.minio.svc.cluster.local:9000",
-                "AWS_S3_VERIFY_SSL": "false",
-                "S3_ENDPOINT_URL": "https://minio.minio.svc.cluster.local:9000"
-            }
-        }
-    )
+    ray.init()
 
     # Configure the trainer
     scaling_config = ScalingConfig(
         num_workers=2,  # Number of distributed training workers
-        use_gpu=False,  # Set to True if GPUs are available
+        use_gpu=True,  
         resources_per_worker={
             "CPU": 2,
-            "GPU": 0  # Change to 1 if using GPUs
+            "GPU": 1
         }
     )
 
-    run_config = RunConfig(
+     run_config = RunConfig(
         name="fashion_mnist_train",
         storage_path="s3://checkpoints/",
         checkpoint_config=CheckpointConfig(
@@ -231,5 +211,5 @@ def main():
     print("="*50)
 
 
-if __name__ == "__main__":
+  if __name__ == "__main__":
     main()

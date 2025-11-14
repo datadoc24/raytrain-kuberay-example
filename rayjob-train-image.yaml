@@ -1,0 +1,83 @@
+apiVersion: ray.io/v1
+kind: RayJob
+metadata:
+  name: raytrain-fashion-mnist
+  namespace: default
+spec:
+  # The entrypoint command to run the training job
+  entrypoint: python /app/train.py
+
+  # Runtime environment for the job
+  runtimeEnvYAML: |
+    pip:
+      - torch==2.9.0
+      - torchvision==0.24.0
+      - boto3
+      - s3fs
+    env_vars:
+      RAY_LOG_TO_STDERR: "1"
+      RAY_TRAIN_WORKER_GROUP_START_TIMEOUT_S: "300"
+      AWS_ACCESS_KEY_ID: "minioadmin"
+      AWS_SECRET_ACCESS_KEY: "minioadmin"
+      AWS_ENDPOINT_URL: "http://minio.minio.svc.cluster.local:9000"
+      S3_ENDPOINT_URL: "http://minio.minio.svc.cluster.local:9000"
+
+
+  # Shutdown behavior after job completes
+  shutdownAfterJobFinishes: true
+  ttlSecondsAfterFinished: 600
+
+  # Ray cluster configuration
+  rayClusterSpec:
+    rayVersion: '2.51.1'
+
+    # Head node configuration
+    headGroupSpec:
+      rayStartParams:
+        dashboard-host: '0.0.0.0'
+        block: 'true'
+      template:
+        spec:
+          containers:
+          - name: ray-head
+            image: registry.us-southcentral1-a.ccr.crusoecloudcompute.com/abetest.e95e306b/raytrain-mnist-example:v1
+            imagePullPolicy: IfNotPresent
+            ports:
+            - containerPort: 6379
+              name: gcs
+            - containerPort: 8265
+              name: dashboard
+            - containerPort: 10001
+              name: client
+            resources:
+              limits:
+                cpu: "2"
+                memory: "4Gi"
+                nvidia.com/gpu: "0"
+              requests:
+                cpu: "2"
+                memory: "4Gi"
+                nvidia.com/gpu: "0"
+    # Worker node configuration
+    workerGroupSpecs:
+    - replicas: 2
+      minReplicas: 2
+      maxReplicas: 2
+      groupName: worker-group
+      rayStartParams:
+        block: 'true'
+      template:
+        spec:
+          containers:
+          - name: ray-worker
+            image: registry.us-southcentral1-a.ccr.crusoecloudcompute.com/abetest.e95e306b/raytrain-mnist-example:v1
+            imagePullPolicy: IfNotPresent
+            resources:
+              limits:
+                cpu: "2"
+                memory: "4Gi"
+                nvidia.com/gpu: "1"
+              requests:
+                cpu: "2"
+                memory: "4Gi"
+                nvidia.com/gpu: "1"
